@@ -32,8 +32,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transcript = await getTranscript(videoUrl);
-    const timestampedData = await getTimestampedTranscript(videoUrl);
+    let transcript = '';
+    let timestampedData: any = { items: [] };
+
+    try {
+      transcript = await getTranscript(videoUrl);
+      timestampedData = await getTimestampedTranscript(videoUrl);
+    } catch (tError: any) {
+      // If transcript is missing or cannot be fetched, return a friendly message instead of 500
+      const userMessage =
+        (tError && typeof tError.message === 'string' && tError.message.includes('No transcript'))
+          ? tError.message
+          : 'No transcript available for this video. Please ensure captions/subtitles are enabled.';
+
+      return NextResponse.json(
+        { success: false, error: userMessage, hint: 'Try a video with captions (auto-generated or uploaded) or upload subtitles.' },
+        { status: 200 }
+      );
+    }
 
     const systemPrompt = `Create a comprehensive structured summary of this lecture. Include:
     1. Main topic overview

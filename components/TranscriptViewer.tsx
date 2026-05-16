@@ -20,9 +20,9 @@ export function TranscriptViewer({
 }: TranscriptViewerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [userScrolling, setUserScrolling] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const activeItemRef = useRef<HTMLDivElement>(null);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout>();
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeItemRef = useRef<HTMLDivElement | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Handle manual scrolling - disable auto-scroll when user scrolls
   useEffect(() => {
@@ -31,7 +31,11 @@ export function TranscriptViewer({
 
     const handleScroll = () => {
       setUserScrolling(true);
-      clearTimeout(scrollTimeoutRef.current);
+      if (scrollTimeoutRef.current) {
+        // `clearTimeout` accepts different timer id types across environments
+        // cast to any to satisfy both browser and Node typings
+        window.clearTimeout(scrollTimeoutRef.current as any);
+      }
       // Re-enable auto-scroll after 3 seconds of no scrolling
       scrollTimeoutRef.current = setTimeout(() => {
         setUserScrolling(false);
@@ -41,7 +45,9 @@ export function TranscriptViewer({
     container.addEventListener('scroll', handleScroll);
     return () => {
       container.removeEventListener('scroll', handleScroll);
-      clearTimeout(scrollTimeoutRef.current);
+      if (scrollTimeoutRef.current) {
+        window.clearTimeout(scrollTimeoutRef.current as any);
+      }
     };
   }, []);
 

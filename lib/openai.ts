@@ -26,31 +26,39 @@ function trimTranscript(transcript: string): string {
 export async function detectLanguage(text: string): Promise<string> {
   try {
     const apiKey = getGroqApiKey();
-    const response = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        max_tokens: 50,
-        messages: [
-          {
-            role: 'user',
-            content: `Detect the language of this text and respond with ONLY the language name (English, Hindi, Hinglish, Marathi, Tamil, Telugu, or Bengali). Text: "${text}"`,
-          },
-        ],
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    try {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          max_tokens: 50,
+          messages: [
+            {
+              role: 'user',
+              content: `Detect the language of this text and respond with ONLY the language name (English, Hindi, Hinglish, Marathi, Tamil, Telugu, or Bengali). Text: "${text}"`,
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      return 'english';
+      if (!response.ok) {
+        return 'english';
+      }
+
+      const data = await response.json();
+      const result = data.choices[0]?.message?.content || 'English';
+      return result.toLowerCase();
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const data = await response.json();
-    const result = data.choices[0]?.message?.content || 'English';
-    return result.toLowerCase();
   } catch (error) {
     return 'english';
   }
@@ -71,34 +79,42 @@ export async function generateResponse(
     const langInstruction = `Respond in ${language}. `;
     const trimmedTranscript = trimTranscript(transcript);
     
-    const response = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        max_tokens: options?.maxTokens ?? 1000,
-        ...(options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-        messages: [
-          {
-            role: 'user',
-            content: `${langInstruction}${systemPrompt}\n\nTranscript: ${trimmedTranscript}\n\nQuery: ${query}`,
-          },
-        ],
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout for larger responses
+    
+    try {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          max_tokens: options?.maxTokens ?? 1000,
+          ...(options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+          messages: [
+            {
+              role: 'user',
+              content: `${langInstruction}${systemPrompt}\n\nTranscript: ${trimmedTranscript}\n\nQuery: ${query}`,
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(`Groq API error (${response.status}):`, error);
-      throw new Error(`Groq API error (${response.status}): ${error}`);
+      if (!response.ok) {
+        const error = await response.text();
+        console.error(`Groq API error (${response.status}):`, error);
+        throw new Error(`Groq API error (${response.status}): ${error}`);
+      }
+
+      const data = await response.json();
+      const result = data.choices[0]?.message?.content || '';
+      return result;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const data = await response.json();
-    const result = data.choices[0]?.message?.content || '';
-    return result;
   } catch (error) {
     throw new Error(`Failed to generate response: ${error}`);
   }

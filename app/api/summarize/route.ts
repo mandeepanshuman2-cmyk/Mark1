@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTranscript, getTimestampedTranscript } from '@/lib/transcript';
+import { getTranscript, getTimestampedTranscript, type TranscriptItem } from '@/lib/transcript';
 import { generateResponse, detectLanguage } from '@/lib/openai';
 
 export async function POST(request: NextRequest) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         language,
         timestamp: new Date().toISOString(),
         hasVideo: !!timestampedData?.items,
-        videoLength: timestampedData?.items?.reduce((sum: number, item) => sum + (item.duration || 0), 0) || 0,
+        videoLength: timestampedData?.items?.reduce((sum: number, item: TranscriptItem) => sum + (item.duration || 0), 0) || 0,
       },
     });
   } catch (error) {

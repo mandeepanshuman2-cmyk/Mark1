@@ -17,8 +17,9 @@ export async function POST(request: NextRequest) {
       data: { videoUrl, message: 'Video URL set successfully' },
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to set video';
     return NextResponse.json(
-      { success: false, error: `Failed to set video: ${error}` },
+      { success: false, error: message },
       { status: 500 }
     );
   }

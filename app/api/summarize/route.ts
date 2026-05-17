@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         language,
         timestamp: new Date().toISOString(),
         hasVideo: !!timestampedData?.items,
-        videoLength: timestampedData?.items?.reduce((sum, item) => sum + (item.duration || 0), 0) || 0,
+        videoLength: timestampedData?.items?.reduce((sum: number, item) => sum + (item.duration || 0), 0) || 0,
       },
     });
   } catch (error) {

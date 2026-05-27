@@ -41,25 +41,35 @@ export async function getTranscript(videoUrl: string): Promise<string> {
 
     // Try fetching with different languages
     let transcript = '';
+    const errors: string[] = [];
+    
     try {
       const transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
         lang: 'en',
       });
       transcript = transcriptData.map((item: any) => item.text).join(' ');
     } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
       try {
         const transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
           lang: 'hi',
         });
         transcript = transcriptData.map((item: any) => item.text).join(' ');
       } catch (e2) {
-        const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
-        transcript = transcriptData.map((item: any) => item.text).join(' ');
+        errors.push(e2 instanceof Error ? e2.message : String(e2));
+        try {
+          const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+          transcript = transcriptData.map((item: any) => item.text).join(' ');
+        } catch (e3) {
+          errors.push(e3 instanceof Error ? e3.message : String(e3));
+        }
       }
     }
 
     if (!transcript) {
-      throw new Error('No transcript available');
+      // Provide more context in error message
+      console.error('[v0] Transcript fetch failed. Errors:', errors);
+      throw new Error('No transcripts are available for this video');
     }
 
     // Cache the transcript
@@ -133,6 +143,7 @@ export async function getTimestampedTranscript(videoUrl: string): Promise<Timest
 
     let transcriptData: any[] = [];
     let language = 'en';
+    const errors: string[] = [];
 
     // Try fetching with different languages
     try {
@@ -141,19 +152,26 @@ export async function getTimestampedTranscript(videoUrl: string): Promise<Timest
       });
       language = 'en';
     } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
       try {
         transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
           lang: 'hi',
         });
         language = 'hi';
       } catch (e2) {
-        transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
-        language = 'auto';
+        errors.push(e2 instanceof Error ? e2.message : String(e2));
+        try {
+          transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+          language = 'auto';
+        } catch (e3) {
+          errors.push(e3 instanceof Error ? e3.message : String(e3));
+        }
       }
     }
 
     if (!transcriptData || transcriptData.length === 0) {
-      throw new Error('No transcript available');
+      console.error('[v0] Timestamped transcript fetch failed. Errors:', errors);
+      throw new Error('No transcripts are available for this video');
     }
 
     const isEducational = await isEducationalVideo(videoUrl);
@@ -188,19 +206,19 @@ export function getTranscriptErrorMessage(error: unknown): string {
     message.includes('Transcript is disabled') ||
     message.includes('No transcripts are available in')
   ) {
-    return 'No transcript available for this video. Please make sure the video has:\n• Auto-generated captions (YouTube usually provides these)\n• Or manually added subtitles\n\nTip: Check the video\'s "Show More" section for subtitle options.';
+    return 'No transcript available for this video.\n\nPlease make sure the video has:\n• Auto-generated captions (YouTube usually provides these)\n• Or manually added subtitles\n\nTips:\n• Check the video\'s "Show More" section for subtitle options\n• Some videos may need to be unlisted or fully public for transcripts to be available\n• Try refreshing the page and re-entering the URL if you recently enabled captions';
   }
 
   // Rate limiting or API errors
   if (message.includes('403') || message.includes('Forbidden')) {
-    return 'Could not access this video. It might be restricted or have disabled transcripts. Please try another video.';
+    return 'Could not access this video. It might be:\n• Region-restricted\n• Have disabled transcripts\n• Private or age-restricted\n\nPlease try another video or ensure it has captions enabled.';
   }
 
   if (message.includes('404') || message.includes('Not Found')) {
-    return 'Video not found. Please check the URL and try again.';
+    return 'Video not found. Please check the URL is correct and try again. The video may have been deleted or made private.';
   }
 
-  return 'Could not fetch the transcript from YouTube. Please try another video with captions enabled, or check your internet connection.';
+  return 'Could not fetch the transcript from YouTube.\n\nPlease try:\n• Using a different YouTube video with captions enabled\n• Checking your internet connection\n• Refreshing the page and trying again';
 }
 
 function normalizeTranscriptItem(item: any): TranscriptItem {

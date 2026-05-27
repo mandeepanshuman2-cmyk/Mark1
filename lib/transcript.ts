@@ -1,11 +1,10 @@
-import { YoutubeTranscript } from 'youtube-transcript';
+/**
+ * Transcript fetching using RapidAPI YouTube Transcript API
+ * This avoids YouTube's rate limiting by using an official third-party API
+ */
 
 export const TRANSCRIPT_UNAVAILABLE_MESSAGE =
   'No transcript available for this video. Please use a YouTube video with captions or subtitles enabled.';
-
-// Retry configuration for fetching transcripts
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 1000;
 
 export interface TranscriptItem {
   text: string;
@@ -30,38 +29,69 @@ interface TimestampedTranscriptCache {
 const transcriptCache: TranscriptCache = {};
 const timestampedTranscriptCache: TimestampedTranscriptCache = {};
 
-// Helper to add delay between retries
+// Helper to add delay between requests
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Retry mechanism for fetching transcripts
-async function fetchTranscriptWithRetry(
-  videoId: string,
-  options?: { lang?: string }
-): Promise<any[]> {
-  let lastError: Error | null = null;
+/**
+ * Fetches transcript from RapidAPI YouTube Transcript API
+ * Documentation: https://rapidapi.com/grix-grix-grix/api/youtube-transcript
+ */
+async function fetchFromRapidAPI(videoId: string): Promise<any[]> {
+  const apiKey = process.env.RAPIDAPI_KEY;
+  const apiHost = 'youtube-transcript1.p.rapidapi.com';
 
-  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
-    try {
-      console.log(`[v0] Attempt ${attempt}/${RETRY_ATTEMPTS} to fetch transcript for ${videoId}`);
-      const data = await YoutubeTranscript.fetchTranscript(videoId, options);
-      if (data && data.length > 0) {
-        console.log(`[v0] Successfully fetched transcript on attempt ${attempt}`);
-        return data;
-      }
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-      console.log(`[v0] Attempt ${attempt} failed: ${lastError.message}`);
-      
-      // Don't delay on the last attempt
-      if (attempt < RETRY_ATTEMPTS) {
-        await delay(RETRY_DELAY_MS * attempt); // Exponential backoff
-      }
-    }
+  if (!apiKey) {
+    throw new Error(
+      'RapidAPI key not configured. Please set RAPIDAPI_KEY environment variable.'
+    );
   }
 
-  throw lastError || new Error('Failed to fetch transcript after all retry attempts');
+  try {
+    console.log(`[v0] Fetching transcript from RapidAPI for video: ${videoId}`);
+    
+    const response = await fetch(
+      `https://${apiHost}/get_transcripts?videoId=${videoId}`,
+      {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': apiKey,
+          'X-RapidAPI-Host': apiHost,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`[v0] RapidAPI error: ${response.status} - ${errorBody}`);
+      
+      if (response.status === 429) {
+        throw new Error('Rate limited by RapidAPI. Please try again in a moment.');
+      } else if (response.status === 404) {
+        throw new Error('No transcript available');
+      } else if (response.status === 403) {
+        throw new Error('Access forbidden - API key may be invalid');
+      }
+      
+      throw new Error(`RapidAPI error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // RapidAPI returns transcripts in different formats depending on the endpoint
+    // Handle both array and object responses
+    const transcripts = Array.isArray(data) ? data : data.transcripts || data.items || [];
+    
+    if (!transcripts || transcripts.length === 0) {
+      throw new Error('No transcript data returned from API');
+    }
+
+    console.log(`[v0] Successfully fetched ${transcripts.length} transcript items`);
+    return transcripts;
+  } catch (error) {
+    throw error;
+  }
 }
 
 export async function getTranscript(videoUrl: string): Promise<string> {
@@ -74,39 +104,24 @@ export async function getTranscript(videoUrl: string): Promise<string> {
 
     // Check cache
     if (transcriptCache[videoId]) {
+      console.log(`[v0] Returning cached transcript for ${videoId}`);
       return transcriptCache[videoId];
     }
 
-    // Try fetching with different languages using retry mechanism
-    let transcript = '';
-    const errors: string[] = [];
-    
-    // Try English first
-    try {
-      const transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'en' });
-      transcript = transcriptData.map((item: any) => item.text).join(' ');
-    } catch (e) {
-      errors.push(`English: ${e instanceof Error ? e.message : String(e)}`);
-      
-      // Try Hindi as fallback
-      try {
-        const transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'hi' });
-        transcript = transcriptData.map((item: any) => item.text).join(' ');
-      } catch (e2) {
-        errors.push(`Hindi: ${e2 instanceof Error ? e2.message : String(e2)}`);
-        
-        // Try auto-detection as last resort
-        try {
-          const transcriptData = await fetchTranscriptWithRetry(videoId);
-          transcript = transcriptData.map((item: any) => item.text).join(' ');
-        } catch (e3) {
-          errors.push(`Auto: ${e3 instanceof Error ? e3.message : String(e3)}`);
-        }
-      }
+    // Fetch from RapidAPI
+    const transcriptData = await fetchFromRapidAPI(videoId);
+
+    if (!transcriptData || transcriptData.length === 0) {
+      throw new Error('No transcripts are available for this video');
     }
 
+    // Combine all text from transcript items
+    const transcript = transcriptData
+      .map((item: any) => item.text || item.snippet || '')
+      .filter((text: string) => text.trim())
+      .join(' ');
+
     if (!transcript) {
-      console.error('[v0] All transcript fetch attempts failed. Errors:', errors);
       throw new Error('No transcripts are available for this video');
     }
 
@@ -142,7 +157,7 @@ function extractVideoId(url: string): string | null {
     /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
     // m.youtube.com variants
     /m\.youtube\.com\/watch\?[^&]*v=([a-zA-Z0-9_-]{11})/i,
-    // Generic fallback for any youtube URL with v= parameter
+    // Generic fallback for any youtube url with v= parameter
     /[?&]v=([a-zA-Z0-9_-]{11})/i,
   ];
 
@@ -176,35 +191,14 @@ export async function getTimestampedTranscript(videoUrl: string): Promise<Timest
 
     // Check cache
     if (timestampedTranscriptCache[videoId]) {
+      console.log(`[v0] Returning cached timestamped transcript for ${videoId}`);
       return timestampedTranscriptCache[videoId];
     }
 
-    let transcriptData: any[] = [];
-    let language = 'en';
-    const errors: string[] = [];
-
-    // Try fetching with different languages using retry mechanism
-    try {
-      transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'en' });
-      language = 'en';
-    } catch (e) {
-      errors.push(`English: ${e instanceof Error ? e.message : String(e)}`);
-      try {
-        transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'hi' });
-        language = 'hi';
-      } catch (e2) {
-        errors.push(`Hindi: ${e2 instanceof Error ? e2.message : String(e2)}`);
-        try {
-          transcriptData = await fetchTranscriptWithRetry(videoId);
-          language = 'auto';
-        } catch (e3) {
-          errors.push(`Auto: ${e3 instanceof Error ? e3.message : String(e3)}`);
-        }
-      }
-    }
+    // Fetch from RapidAPI
+    const transcriptData = await fetchFromRapidAPI(videoId);
 
     if (!transcriptData || transcriptData.length === 0) {
-      console.error('[v0] All timestamped transcript attempts failed. Errors:', errors);
       throw new Error('No transcripts are available for this video');
     }
 
@@ -212,7 +206,7 @@ export async function getTimestampedTranscript(videoUrl: string): Promise<Timest
     const items = transcriptData.map(normalizeTranscriptItem);
     const timestampedTranscript = {
       items,
-      language,
+      language: 'en', // RapidAPI typically returns English by default
       isEducational,
     };
 
@@ -233,6 +227,11 @@ export function getTranscriptErrorMessage(error: unknown): string {
     return 'Invalid YouTube URL format. Please use: https://www.youtube.com/watch?v=VIDEO_ID, https://youtu.be/VIDEO_ID, or just the VIDEO_ID';
   }
 
+  // API key not configured
+  if (message.includes('RAPIDAPI_KEY') || message.includes('RapidAPI key not configured')) {
+    return 'Server error: API not properly configured. Please contact support.';
+  }
+
   // Transcript unavailable errors
   if (
     message.includes('No transcript available') ||
@@ -243,8 +242,13 @@ export function getTranscriptErrorMessage(error: unknown): string {
     return 'No transcript available for this video.\n\nPlease make sure the video has:\n• Auto-generated captions (YouTube usually provides these)\n• Or manually added subtitles\n\nTips:\n• Check the video\'s "Show More" section for subtitle options\n• Some videos may need to be unlisted or fully public for transcripts to be available\n• Try refreshing the page and re-entering the URL if you recently enabled captions';
   }
 
-  // Rate limiting or API errors
-  if (message.includes('403') || message.includes('Forbidden')) {
+  // Rate limiting errors
+  if (message.includes('429') || message.includes('Rate limited')) {
+    return 'API is temporarily rate limited. Please wait a moment and try again.';
+  }
+
+  // Access forbidden errors
+  if (message.includes('403') || message.includes('Forbidden') || message.includes('Access forbidden')) {
     return 'Could not access this video. It might be:\n• Region-restricted\n• Have disabled transcripts\n• Private or age-restricted\n\nPlease try another video or ensure it has captions enabled.';
   }
 
@@ -256,11 +260,11 @@ export function getTranscriptErrorMessage(error: unknown): string {
 }
 
 function normalizeTranscriptItem(item: any): TranscriptItem {
-  const rawStart = Number(item.start ?? item.offset ?? 0);
-  const rawDuration = Number(item.duration ?? item.dur ?? 0);
+  const rawStart = Number(item.start ?? item.offset ?? item.startMs ?? 0);
+  const rawDuration = Number(item.duration ?? item.dur ?? item.durationMs ?? 0);
 
   return {
-    text: item.text || '',
+    text: item.text || item.snippet || '',
     start: normalizeTranscriptTime(rawStart),
     duration: normalizeTranscriptTime(rawDuration),
   };
@@ -271,7 +275,7 @@ function normalizeTranscriptTime(value: number): number {
     return 0;
   }
 
-  // The package can parse classic captions in seconds and srv3 captions in ms.
+  // Handle both seconds and milliseconds
   return value > 1000 ? value / 1000 : value;
 }
 
@@ -319,9 +323,9 @@ export async function isEducationalVideo(videoUrl: string): Promise<boolean> {
     // In production, you'd fetch video metadata via YouTube API
     // For MVP, we'll check basic keywords but default to true
     const urlLower = videoUrl.toLowerCase();
-    
+
     // Check if URL contains educational keywords
-    const hasEducationalKeyword = EDUCATIONAL_KEYWORDS.some(keyword => 
+    const hasEducationalKeyword = EDUCATIONAL_KEYWORDS.some(keyword =>
       urlLower.includes(keyword)
     );
 

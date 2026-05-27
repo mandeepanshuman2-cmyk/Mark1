@@ -4,24 +4,6 @@ import { generateResponse, detectLanguage } from '@/lib/openai';
 
 export async function POST(request: NextRequest) {
   try {
-    // Debug: Check if env vars are present
-    const hasGroqKey = !!process.env.GROQ_API_KEY;
-    const groqModel = process.env.GROQ_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
-    
-    if (!hasGroqKey) {
-      console.error('❌ Missing Groq environment variables:', {
-        GROQ_API_KEY: '✗ MISSING',
-      });
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Server configuration error: Missing Groq API credentials. Check Vercel Environment Variables.',
-          debug: { hasGroqKey }
-        },
-        { status: 500 }
-      );
-    }
-
     const { videoUrl, language = 'english' } = await request.json();
 
     if (!videoUrl) {

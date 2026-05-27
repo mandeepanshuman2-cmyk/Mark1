@@ -585,7 +585,7 @@ export default function Home() {
                     ['Multi-language', 'Learn in your comfort language'],
                     ['Interactive', 'Ask, practice, and improve'],
                     ['Personalized', 'Topic-wise outputs from the lecture'],
-                    ['Private key', 'Groq key stays server-side'],
+                    ['Secure', 'AI processing powered by Vercel'],
                   ].map(([title, desc], idx) => (
                     <div key={title} className="flex gap-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-xs font-black text-violet-200">

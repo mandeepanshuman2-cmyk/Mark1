@@ -415,6 +415,7 @@ export default function Home() {
                 onChange={(e) => updateQuizAnswer(idx, e.target.value)}
                 disabled={quizSubmitted}
                 placeholder="Type your answer..."
+                suppressHydrationWarning
                 className="mt-3 w-full rounded-xl border border-yellow-500/25 bg-slate-950/45 px-3 py-2 text-white outline-none focus:border-yellow-300"
               />
             )}
@@ -465,6 +466,7 @@ export default function Home() {
       {result.data?.quiz?.questions?.length > 0 && !quizSubmitted && (
         <button
           onClick={() => setQuizSubmitted(true)}
+          suppressHydrationWarning
           className="mt-4 rounded-xl bg-yellow-400 px-5 py-2 font-bold text-black transition hover:bg-yellow-300"
         >
           Submit Answers
@@ -491,6 +493,7 @@ export default function Home() {
               <button
                 key={feature.id}
                 onClick={() => setActiveTab(feature.id)}
+                suppressHydrationWarning
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
                   activeTab === feature.id
                     ? 'bg-gradient-to-r from-violet-700 to-indigo-700 font-bold text-white'
@@ -548,15 +551,15 @@ export default function Home() {
                       type="text"
                       value={videoUrl}
                       onChange={(e) => setVideoUrl(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleGenerate();
-                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
                       placeholder="Koi bhi YouTube lecture ka link yahan paste karo..."
+                      suppressHydrationWarning
                       className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm text-white outline-none placeholder:text-slate-600"
                     />
                     {videoUrl && (
                       <button
                         onClick={() => setVideoUrl('')}
+                        suppressHydrationWarning
                         className="rounded-lg px-2 py-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-200"
                         aria-label="Clear URL"
                       >
@@ -566,6 +569,7 @@ export default function Home() {
                     <button
                       onClick={handleGenerate}
                       disabled={loading || !videoUrl.trim()}
+                      suppressHydrationWarning
                       className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:from-violet-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:from-white/10 disabled:to-white/10 disabled:text-slate-600"
                     >
                       {loading ? 'Working...' : activeFeature.action}
@@ -607,6 +611,7 @@ export default function Home() {
               <button
                 key={feature.id}
                 onClick={() => setActiveTab(feature.id)}
+                suppressHydrationWarning
                 className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/30 ${
                   activeTab === feature.id
                     ? 'border-violet-400/50 bg-violet-500/15'
@@ -646,6 +651,7 @@ export default function Home() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={inputPlaceholder()}
+                    suppressHydrationWarning
                     className="w-full rounded-xl border border-violet-500/20 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300"
                   />
                 </div>
@@ -672,6 +678,7 @@ export default function Home() {
               <button
                 onClick={handleGenerate}
                 disabled={loading || !videoUrl.trim()}
+                suppressHydrationWarning
                 className="mt-5 w-full rounded-xl bg-gradient-to-r from-yellow-400 to-amber-300 px-5 py-3 font-black text-black transition hover:from-yellow-300 hover:to-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? 'Generating...' : activeFeature.action}

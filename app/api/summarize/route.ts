@@ -6,18 +6,17 @@ export async function POST(request: NextRequest) {
   try {
     // Debug: Check if env vars are present
     const hasGroqKey = !!process.env.GROQ_API_KEY;
-    const hasGroqModel = !!process.env.GROQ_MODEL;
+    const groqModel = process.env.GROQ_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
     
-    if (!hasGroqKey || !hasGroqModel) {
+    if (!hasGroqKey) {
       console.error('❌ Missing Groq environment variables:', {
-        GROQ_API_KEY: hasGroqKey ? '✓ present' : '✗ MISSING',
-        GROQ_MODEL: hasGroqModel ? '✓ present' : '✗ MISSING',
+        GROQ_API_KEY: '✗ MISSING',
       });
       return NextResponse.json(
         { 
           success: false, 
           error: 'Server configuration error: Missing Groq API credentials. Check Vercel Environment Variables.',
-          debug: { hasGroqKey, hasGroqModel }
+          debug: { hasGroqKey }
         },
         { status: 500 }
       );

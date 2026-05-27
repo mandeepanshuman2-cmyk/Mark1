@@ -474,7 +474,7 @@ export default function Home() {
   );
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#07071a] text-slate-100">
+    <div className="relative min-h-screen overflow-hidden bg-[#07071a] text-slate-100" suppressHydrationWarning>
       <StarBackground />
       <div className="relative z-10 flex min-h-screen">
         <aside className="hidden w-[236px] shrink-0 border-r border-violet-500/15 bg-[#0b0b22]/95 p-4 lg:flex lg:flex-col">
@@ -877,7 +877,7 @@ function DashboardCard({
     <div className="rounded-2xl border border-violet-500/15 bg-white/[0.03] p-5">
       <div className="mb-5 flex items-center justify-between gap-3">
         <h3 className="font-black text-white">{title}</h3>
-        <button onClick={onClick} className="text-xs font-bold text-violet-300 hover:text-violet-200">
+        <button onClick={onClick} className="text-xs font-bold text-violet-300 hover:text-violet-200" type="button">
           {action}
         </button>
       </div>

@@ -3,6 +3,10 @@ import { YoutubeTranscript } from 'youtube-transcript';
 export const TRANSCRIPT_UNAVAILABLE_MESSAGE =
   'No transcript available for this video. Please use a YouTube video with captions or subtitles enabled.';
 
+// Retry configuration for fetching transcripts
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1000;
+
 export interface TranscriptItem {
   text: string;
   start: number;
@@ -26,6 +30,40 @@ interface TimestampedTranscriptCache {
 const transcriptCache: TranscriptCache = {};
 const timestampedTranscriptCache: TimestampedTranscriptCache = {};
 
+// Helper to add delay between retries
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Retry mechanism for fetching transcripts
+async function fetchTranscriptWithRetry(
+  videoId: string,
+  options?: { lang?: string }
+): Promise<any[]> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      console.log(`[v0] Attempt ${attempt}/${RETRY_ATTEMPTS} to fetch transcript for ${videoId}`);
+      const data = await YoutubeTranscript.fetchTranscript(videoId, options);
+      if (data && data.length > 0) {
+        console.log(`[v0] Successfully fetched transcript on attempt ${attempt}`);
+        return data;
+      }
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      console.log(`[v0] Attempt ${attempt} failed: ${lastError.message}`);
+      
+      // Don't delay on the last attempt
+      if (attempt < RETRY_ATTEMPTS) {
+        await delay(RETRY_DELAY_MS * attempt); // Exponential backoff
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed to fetch transcript after all retry attempts');
+}
+
 export async function getTranscript(videoUrl: string): Promise<string> {
   try {
     // Extract video ID from URL
@@ -39,36 +77,36 @@ export async function getTranscript(videoUrl: string): Promise<string> {
       return transcriptCache[videoId];
     }
 
-    // Try fetching with different languages
+    // Try fetching with different languages using retry mechanism
     let transcript = '';
     const errors: string[] = [];
     
+    // Try English first
     try {
-      const transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: 'en',
-      });
+      const transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'en' });
       transcript = transcriptData.map((item: any) => item.text).join(' ');
     } catch (e) {
-      errors.push(e instanceof Error ? e.message : String(e));
+      errors.push(`English: ${e instanceof Error ? e.message : String(e)}`);
+      
+      // Try Hindi as fallback
       try {
-        const transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
-          lang: 'hi',
-        });
+        const transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'hi' });
         transcript = transcriptData.map((item: any) => item.text).join(' ');
       } catch (e2) {
-        errors.push(e2 instanceof Error ? e2.message : String(e2));
+        errors.push(`Hindi: ${e2 instanceof Error ? e2.message : String(e2)}`);
+        
+        // Try auto-detection as last resort
         try {
-          const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+          const transcriptData = await fetchTranscriptWithRetry(videoId);
           transcript = transcriptData.map((item: any) => item.text).join(' ');
         } catch (e3) {
-          errors.push(e3 instanceof Error ? e3.message : String(e3));
+          errors.push(`Auto: ${e3 instanceof Error ? e3.message : String(e3)}`);
         }
       }
     }
 
     if (!transcript) {
-      // Provide more context in error message
-      console.error('[v0] Transcript fetch failed. Errors:', errors);
+      console.error('[v0] All transcript fetch attempts failed. Errors:', errors);
       throw new Error('No transcripts are available for this video');
     }
 
@@ -145,32 +183,28 @@ export async function getTimestampedTranscript(videoUrl: string): Promise<Timest
     let language = 'en';
     const errors: string[] = [];
 
-    // Try fetching with different languages
+    // Try fetching with different languages using retry mechanism
     try {
-      transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: 'en',
-      });
+      transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'en' });
       language = 'en';
     } catch (e) {
-      errors.push(e instanceof Error ? e.message : String(e));
+      errors.push(`English: ${e instanceof Error ? e.message : String(e)}`);
       try {
-        transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
-          lang: 'hi',
-        });
+        transcriptData = await fetchTranscriptWithRetry(videoId, { lang: 'hi' });
         language = 'hi';
       } catch (e2) {
-        errors.push(e2 instanceof Error ? e2.message : String(e2));
+        errors.push(`Hindi: ${e2 instanceof Error ? e2.message : String(e2)}`);
         try {
-          transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+          transcriptData = await fetchTranscriptWithRetry(videoId);
           language = 'auto';
         } catch (e3) {
-          errors.push(e3 instanceof Error ? e3.message : String(e3));
+          errors.push(`Auto: ${e3 instanceof Error ? e3.message : String(e3)}`);
         }
       }
     }
 
     if (!transcriptData || transcriptData.length === 0) {
-      console.error('[v0] Timestamped transcript fetch failed. Errors:', errors);
+      console.error('[v0] All timestamped transcript attempts failed. Errors:', errors);
       throw new Error('No transcripts are available for this video');
     }
 
